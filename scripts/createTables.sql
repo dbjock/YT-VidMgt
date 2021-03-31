@@ -10,8 +10,8 @@ CREATE TABLE vidinfo (
     vid_url,
     channel_url,
     upload_date DATETIME,
-    description,
     vid_title,
+    season,
     episode     INTEGER  UNIQUE
 );
 
