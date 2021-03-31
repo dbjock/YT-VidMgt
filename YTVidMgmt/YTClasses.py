@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 class APPdb:
     def __init__(self, name=None):
         self.conn = None
+        self.dbName = name
         logger.debug(f'name is {name}')
         if name:
             logger.debug(f"attempt open db {name}")
@@ -24,7 +25,6 @@ class APPdb:
             c = self.conn.cursor()
             c.execute("PRAGMA database_list;")
             xtmp = c.fetchall()
-            # self.dbfile = xtmp[0][2]
             logger.debug(f"database_list={xtmp}")
 
     def chkDB(self):
@@ -115,23 +115,63 @@ class APPdb:
         self.conn.set_trace_callback(None)
         return [0, "Commit successful"]
 
-    def getLastEpisode(self):
+    def getLastEpisode(self, season):
         """Gets highest episode number in database
 
         Returns:
             int: highest episode number
         """
         c = self.conn.cursor()
-        sql = "SELECT episode FROM vidinfo ORDER BY episode DESC LIMIT 1"
-        logger.debug(f"SQL = {sql}")
-        c.execute(sql)
-        result = c.fetchone()
-        if result is None:
+        selectSQL = "SELECT episode FROM vidinfo "
+        whereSQL = f"WHERE season=? ORDER BY episode DESC LIMIT 1"
+        theVals = (season,)
+        logger.debug(f"{self.dbName}: values = {theVals}")
+        # Build SQL and execute
+        sql = f"{selectSQL} {whereSQL}"
+        try:
+            self.conn.row_factory = sqlite3.Row  # .keys() enabled for column names
+            # enable full sql trackback to logger.debug
+            self.conn.set_trace_callback(logger.debug)
+            c = self.conn.cursor()
+            c.execute(sql, theVals)
+            results = c.fetchone()
+            # Disable full sql traceback
+            self.conn.set_trace_callback(None)
+        except:
+            logger.critical(
+                f'Unexpected error executing sql: {sql}', exc_info=True)
+            sys.exit(1)
+
+        if results is None:
             logger.debug("No records. Last episode = 0")
             return 0
         else:
-            logger.debug(f"result = {result}")
-            return result[0]
+            logger.debug(f"results = {results}")
+            return results[0]
+
+    def getSeasons2Update(self):
+        c = self.conn.cursor()
+        sql = "SELECT season FROM vidinfo WHERE episode is NULL GROUP by season ORDER BY season"
+        # Build SQL and execute
+        try:
+            self.conn.row_factory = sqlite3.Row  # .keys() enabled for column names
+            # enable full sql trackback to logger.debug
+            self.conn.set_trace_callback(logger.debug)
+            c = self.conn.cursor()
+            c.execute(sql)
+            results = c.fetchall()
+            # Disable full sql traceback
+            self.conn.set_trace_callback(None)
+        except:
+            logger.critical(
+                f'Unexpected error executing sql: {sql}', exc_info=True)
+            sys.exit(1)
+        if results is None:
+            logger.debug(f"{self.dbName}: rows returned 0")
+            return 0
+        else:
+            logger.debug(f"{self.dbName}: rows returned {len(results)}")
+            return results
 
     def getVid(self, vid_ID):
         selectSQL = "SELECT vid_ID, vid_url,channel_url,upload_date,description,vid_title,episode FROM vidinfo"
