@@ -12,8 +12,9 @@ import json
 
 # App Custome modules
 from YTVidMgmt import YTClasses
+from YTVidMgmt import memdb
 
-APP_VER = "1.0"
+APP_VER = "1.1.BETAMAX"
 
 # Log Formatters
 smlFMT = logging.Formatter(
@@ -55,7 +56,7 @@ def json2VidRec(jsonFile, delFile=False):
         log.warning(f"{jsonFile} does not exist")
         return vidRec
 
-    # json load into dictionary
+    # Load json
     with open(jsonFile) as jFile:
         jData = json.load(jFile)
         log.debug(f"Loaded file: {jsonFile}")
@@ -65,7 +66,7 @@ def json2VidRec(jsonFile, delFile=False):
         # Convert the YYYYMMDD to YYYY-MM-DD for vidRec
         uploadDate = datetime.strptime(jData['upload_date'], '%Y%m%d')
         vidRec.upload_date = uploadDate.strftime('%Y-%m-%d')
-        vidRec.description = None
+        vidRec.season = uploadDate.strftime('%Y')
         vidRec.vid_title = jData['title']
         vidRec.dl_file = jData['_filename']
 
@@ -129,6 +130,50 @@ def calcFilename(vidRec, YTChannel):
     return f"{YTChannel} - S{season}E{episode} - {cleanTitle}.{vidID}"
 
 
+def json2memDb(inMemDbconn, diskDb):
+    # Create list of all json files
+    jsonFiles = []
+    log.debug(f"getting count of json files")
+    srcFolder = Path(args.inFolder)
+    files = srcFolder.rglob('*.json')
+    for x in files:
+        jsonFiles.append(x)
+
+    log.info(f"Movie metadata files found: {len(jsonFiles)}")
+    # Read jsonfile and update in memory database, which will be used to determine filenames.
+    curFnum = 1
+    for jsonFile in jsonFiles:
+        log.info(f"Loading file {curFnum} of {len(jsonFiles)}: {jsonFile}")
+        curVidRec = json2VidRec(jsonFile)
+
+        # Check db to see if video record object id exists
+        log.debug(
+            f"check disk db for ({curVidRec.vid_ID}) {curVidRec.vid_title}")
+        dbVidRec = diskDb.getVid(curVidRec.vid_ID)
+        if dbVidRec.vid_ID == curVidRec.vid_ID:  # exists in db
+            log.warning(
+                f"({curVidRec.vid_ID}) {curVidRec.vid_title} exists in db. meta data will be ignored")
+            log.debug("replace vidrec with db vidrec object")
+            # store download video file name
+            dbVidRec.dl_file = curVidRec.dl_file
+            # Replace cur video obj with db one
+            del curVidRec
+            curVidRec = copy.copy(dbVidRec)
+            del dbVidRec
+        else:  # does not exist in db
+            log.debug(
+                f"({curVidRec.vid_ID}) {curVidRec.vid_title} does not exist in db")
+
+        # Adding to database
+        result = memdb.addVidRec(inMemDbconn, curVidRec)
+        if result[0] != 0:  # Failure adding
+            log.critical(
+                f"Unable to save video record. vid_id: {curVidRec.vid_ID}, vidFile: {vidRec.dl_file}")
+            log.critical(f"Return Code: {result}")
+            sys.exit(1)
+        curFnum += 1
+
+
 def main(args):
     if args.logFile:
         log_fh = RotatingFileHandler(
@@ -148,7 +193,21 @@ def main(args):
     log.debug(f"args={args}")
     log.info(f"In Directory : {args.inFolder}")
     log.info(f"Out Directory: {args.outFolder}")
-    log.info(f"Connecting to database: {args.dbLoc}")
+    log.info(f"Database File: {args.dbLoc}")
+
+    # Cleaning up for inMem work db. It may have been on disk
+    dbLoc = Path(args.dbLoc).parent / "inMem.tmp"
+    if dbLoc.exists():
+        log.debug(f"Removing {dbLoc}")
+        dbLoc.unlink()
+
+    if not args.noInMemDb:  # inMem working db will be in Memory
+        dbLoc = ":memory:"
+    else:
+        log.info(f"In memory db : {dbLoc}")
+
+    inMemDbconn = memdb.initDB(scriptPath=scriptPath, dbLoc=dbLoc)
+
     appDb = YTClasses.APPdb(args.dbLoc)
     if appDb.chkDB()[0] == 1:
         log.warning("Initializing database")
@@ -156,83 +215,56 @@ def main(args):
 
     log.info("Connected to database")
 
-    # Create list of all json files
-    jsonFiles = []
-    srcFolder = Path(args.inFolder)
-    files = srcFolder.rglob('*.json')
-    for x in files:
-        jsonFiles.append(x)
+    # Take json files into memDB
+    json2memDb(inMemDbconn, appDb)
+    # What inMem seasons need to be updated
+    seasons2Update = memdb.getSeasons2Update(inMemDbconn)
+    log.info(f"Number of seasons to update: {len(seasons2Update)}")
+    for row in seasons2Update:  # Updating each seasn
+        log.info(f"Updating season: {row['season']}")
+        # Get last episode for season
+        # lastSeasonEpisode = appDb.getLastEpisode(season=row['season'])
 
-    log.info(f"Movies found: {len(jsonFiles)}")
-    for jsonFile in jsonFiles:
-        # json file -> video record object
-        log.info(f"Loading {jsonFile}")
-        curVidRec = json2VidRec(jsonFile)
+    #         # Get baseFilename
+    #         baseFilename = calcFilename(curVidRec, Path(args.inFolder).name)
+    #         log.debug(f"Base Filename = {baseFilename}")
 
-        # Check db to see if video record object id exists
-        log.debug(
-            f"Checking db for {curVidRec.vid_title} ({curVidRec.vid_ID})")
-        dbVidRec = appDb.getVid(curVidRec.vid_ID)
-        if dbVidRec.vid_ID == curVidRec.vid_ID:  # exists in db
-            log.warning(
-                f"{curVidRec.vid_title} ({curVidRec.vid_ID}) exists in db. json data will be ignored")
-            log.debug("replace memory vidrec object with db vidrec object")
-            # save the download video file name
-            dbVidRec.dl_file = curVidRec.dl_file
-            # Replace cur video obj with db one
-            del curVidRec
-            curVidRec = copy.copy(dbVidRec)
-            del dbVidRec
-        else:  # does not exist in db
-            log.debug(
-                f"{curVidRec.vid_title} ({curVidRec.vid_ID}) does not exist in db")
-            curVidRec.episode = appDb.getLastEpisode() + 1
-            # Adding to database
-            result = appDb.addVidRec(curVidRec)
-            if result[0] != 0:
-                # Failure adding
-                log.critical(
-                    f"Unable to save video record. vid_id: {curVidRec.vid_ID}, vidFile: {vidRec.dl_file}")
-                log.critical(f"Return Code: {result}")
-                sys.exit(1)
+    #         # Set origin and destination directories
+    #         originDir = Path(curVidRec.dl_file).parent
+    #         log.debug(f"originDir = {originDir}")
+    #         destDir = Path(args.outFolder)
+    #         log.debug(f"destDir = {destDir}")
 
-        # Get baseFilename
-        baseFilename = calcFilename(curVidRec, Path(args.inFolder).name)
-        log.debug(f"Base Filename = {baseFilename}")
+    #         # Create destDir if it doesnt exist
+    #         log.debug(f"checking if destDir={destDir} exists")
+    #         if not destDir.exists():
+    #             log.warning(f"Creating {destDir}")
+    #             destDir.mkdir(parents=True, exist_ok=True)
 
-        # Set origin and destination directories
-        originDir = Path(curVidRec.dl_file).parent
-        log.debug(f"originDir = {originDir}")
-        destDir = Path(args.outFolder)
-        log.debug(f"destDir = {destDir}")
+    #         # Set destination metafilename
+    #         xFilename = baseFilename + ".metadata"
+    #         destMetaFileName = destDir / Path(xFilename)
+    #         log.debug(f"metadata file={destMetaFileName}")
 
-        # Create destDir if it doesnt exist
-        log.debug(f"checking if destDir={destDir} exists")
-        if not destDir.exists():
-            log.warning(f"Creating {destDir}")
-            destDir.mkdir(parents=True, exist_ok=True)
+    #         # Set destination Video file name
+    #         xFilename = baseFilename + Path(curVidRec.dl_file).suffix
+    #         destVidFileName = destDir / xFilename
+    #         log.debug(f"video file name={destVidFileName}")
 
-        # Set destination metafilename
-        xFilename = baseFilename + ".metadata"
-        destMetaFileName = destDir / Path(xFilename)
-        log.debug(f"metadata file={destMetaFileName}")
-
-        # Set destination Video file name
-        xFilename = baseFilename + Path(curVidRec.dl_file).suffix
-        destVidFileName = destDir / xFilename
-        log.debug(f"video file name={destVidFileName}")
-
-        # If video file is missing then don't create anything
-        srcVidFileName = Path(curVidRec.dl_file)
-        if srcVidFileName.exists:
-            # Create destination metafile
-            createMeta(curVidRec, destMetaFileName)
-            # Create destination video file
-            #shutil.copy2(src=srcVidFileName, dst=destVidFileName)
-            shutil.move(src=srcVidFileName, dst=destVidFileName)
-            log.info(f"Created {destVidFileName}")
-        else:  # video file does not exist
-            log.warning(f"Video file {srcVidFileName} missing")
+    #         # If video file is missing then don't create anything
+    #         srcVidFileName = Path(curVidRec.dl_file)
+    #         if srcVidFileName.exists:
+    #             # Create destination metafile
+    #             createMeta(curVidRec, destMetaFileName)
+    #             # Create destination video file
+    #             if args.copyOnly:
+    #                 log.info(f"COPIED to: {destVidFileName}")
+    #                 shutil.copy2(src=srcVidFileName, dst=destVidFileName)
+    #             else:
+    #                 shutil.move(src=srcVidFileName, dst=destVidFileName)
+    #                 log.info(f"Moved to: {destVidFileName}")
+    #         else:  # video file does not exist
+    #             log.warning(f"Video file {srcVidFileName} missing")
 
 
 if __name__ == '__main__':
@@ -247,6 +279,8 @@ if __name__ == '__main__':
     parser.add_argument("-l", "--logFile", help="File to Log to",
                         metavar="LogFile", type=str, dest="logFile")
     parser.add_argument(
-        "-c", "--copy", help="Testing. Video files will be copied not moved.", type=bool, dest="copyOnly")
+        "-c", "--copy", help="Testing. Video files will be copied not moved.", action='store_true', dest="copyOnly")
+    parser.add_argument("--noInMemDb", help="Disable inMemory working table",
+                        action='store_true', dest="noInMemDb")
     args = parser.parse_args()
     main(args)
