@@ -7,12 +7,12 @@ BEGIN TRANSACTION;
 CREATE TABLE vidinfo (
     vid_ID               PRIMARY KEY
                          NOT NULL,
+    vid_title,
     vid_url,
     channel_url,
     upload_date DATETIME,
-    vid_title,
-    season,
-    episode     INTEGER  UNIQUE
+    season      INTEGER,
+    episode     INTEGER
 );
 
 COMMIT TRANSACTION;
