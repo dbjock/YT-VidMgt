@@ -96,7 +96,7 @@ def getVidRecsSeason(dbConn, season):
 
     Returns:
         tuple dictionary list: vid_IDs
-        [{'season':2000},{'season':2001}...]
+        [{'vid_id':'234asdf'},{'vid_id':'2aWedasdff'}...]
     """
     sql = f"SELECT vid_ID FROM vidinfo WHERE episode is NULL AND season={season} ORDER by upload_date"
     # Execute SQL
@@ -109,6 +109,37 @@ def getVidRecsSeason(dbConn, season):
         log.critical(
             f'Unexpected error executing sql: {sql}', exc_info=True)
         sys.exit(1)
+    if results is None:
+        log.debug(f"rows returned 0")
+        return 0
+    else:
+        log.debug(f"rows returned {len(results)}")
+        return results
+
+
+def getVidRow(dbConn, vid_ID):
+    selectSQL = "SELECT vid_ID,vid_title,vid_url,channel_url,upload_date,season,episode,dl_Filename FROM vidinfo"
+    whereSQL = "WHERE vid_ID=?"
+    value = vid_ID
+    # Build SQL and execute
+    sql = f"{selectSQL} {whereSQL}"
+    theVals = (value,)
+    log.debug(f"sql = {sql}")
+    log.debug(f"theVals = {theVals}")
+    try:
+        dbConn.row_factory = sqlite3.Row
+        # enable full sql traceback
+        dbConn.set_trace_callback(log.debug)
+        c = dbConn.cursor()
+        c.execute(sql, theVals)
+        row = c.fetchone()
+        # Disable full sql traceback
+        dbConn.set_trace_callback(None)
+    except:
+        log.critical(
+            f'Unexpected error executing sql: {sql}', exc_info=True)
+        sys.exit(1)
+
     if results is None:
         log.debug(f"rows returned 0")
         return 0
