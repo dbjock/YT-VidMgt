@@ -88,6 +88,33 @@ def getSeasons2Update(dbConn):
         return results
 
 
+def getAllVidRows(dbConn):
+    """Returns a list of all vid_id's in dbConn
+
+    Args:
+        dbConn (db connection): DB connection to the inmem database
+
+    Returns:
+        [list]: A list of vid_id's.
+    """
+    sql = f"SELECT vid_ID FROM vidinfo ORDER by upload_date"
+    # execute SQL
+    try:
+        c = dbConn.cursor()
+        c.execute(sql)
+        results = c.fetchall()
+    except:
+        log.critical(
+            f'Unexpected error executing sql: {sql}', exc_info=True)
+        sys.exit(1)
+    if results is None:
+        log.debug(f"rows returned 0")
+        return 0
+    else:
+        log.debug(f"rows returned {len(results)}")
+        return results
+
+
 def getVidRecsSeason(dbConn, season):
     """Get vid ID's for season which need to be updated..
 
@@ -141,10 +168,10 @@ def getVidRow(dbConn, vid_ID):
         sys.exit(1)
 
     if row is None:
-        log.error(f"no record found for vid_ID:{vid_ID}")
+        log.error(f"record for vid_ID:{vid_ID} NOT found")
         return 0
     else:
-        log.debug(f"record for vid_ID:{vid_ID}")
+        log.debug(f"record for vid_ID:{vid_ID} found.")
         return row
 
 
