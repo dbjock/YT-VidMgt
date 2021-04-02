@@ -9,7 +9,7 @@ import argparse
 import copy
 import json
 
-
+# TODO - Create method to update existing vidRec in the inmem db
 # App Custome modules
 from YTVidMgmt import YTClasses
 from YTVidMgmt import memdb
@@ -215,16 +215,44 @@ def main(args):
 
     log.info("Connected to database")
 
-    # Take json files into memDB
+    # json file data -> working memDB
     json2memDb(inMemDbconn, appDb)
     # What inMem seasons need to be updated
     seasons2Update = memdb.getSeasons2Update(inMemDbconn)
-    log.info(f"Number of seasons to update: {len(seasons2Update)}")
-    for row in seasons2Update:  # Updating each seasn
-        log.info(f"Updating season: {row['season']}")
-        # Get last episode for season
-        # lastSeasonEpisode = appDb.getLastEpisode(season=row['season'])
+    log.debug(f"seasons to update: {len(seasons2Update)}")
+    sCount = 1
+    for sRow in seasons2Update:  # Updating each seasn
+        # Get vidID's that need to be updates
+        vids2Update = memdb.getVidRecsSeason(inMemDbconn, sRow['season'])
+        log.debug(
+            f"season {sRow['season']} - videos to update {len(vids2Update)}")
 
+        # Get last episode for season
+        lastSeasonEpisode = appDb.getLastEpisode(season=sRow['season'])
+
+        # Update inMem database with episode numbers
+        vCount = 1
+        for vidRow in vids2Update:
+            lastSeasonEpisode += 1
+            curVidRec = YTClasses.VidRec(0)
+            vidRowData = memdb.getVidRow(inMemDbconn, vidRow['vid_ID'])
+
+            curVidRec.vid_ID = vidRowData['vid_ID']
+            curVidRec.vid_title = vidRowData['vid_title']
+            curVidRec.vid_url = vidRowData['vid_url']
+            curVidRec.channel_url = vidRowData['channel_url']
+            curVidRec.upload_date = vidRowData['upload_date']
+            curVidRec.season = vidRowData['season']
+            curVidRec.episode = lastSeasonEpisode
+            curVidRec.dl_file = vidRowData['dl_Filename']
+            # Got to save record
+            memdb.updateVidRec(inMemDbconn, curVidRec)
+            # {curVidRec.vid_ID}) {curVidRec.vid_title}
+            log.info(
+                f"Season {curVidRec.season} ({sCount} of {len(seasons2Update)}) Video ({vCount} of {len(vids2Update)}) vid_ID: {curVidRec.vid_ID} assigned episode {curVidRec.episode}")
+            vCount += 1
+
+        sCount += 1
     #         # Get baseFilename
     #         baseFilename = calcFilename(curVidRec, Path(args.inFolder).name)
     #         log.debug(f"Base Filename = {baseFilename}")
