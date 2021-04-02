@@ -9,7 +9,8 @@ import argparse
 import copy
 import json
 
-# TODO - Create method to update existing vidRec in the inmem db
+# TODO - Create function to create/move/copy files to outfolder from inmem db
+# TODO - Convert memdb.getVidRecsSeason to return a list
 # App Custome modules
 from YTVidMgmt import YTClasses
 from YTVidMgmt import memdb
@@ -73,7 +74,28 @@ def json2VidRec(jsonFile, delFile=False):
     return vidRec
 
 
-def createMeta(vidRec, metafName):
+def vidRow2VidRec(vidRowData):
+    """Creates vidRec object from vidRow
+
+    Args:
+        vidRowData (dictType): row data of video
+
+    Returns:
+        VidRec obj: video record class object
+    """
+    vidRec = YTClasses.VidRec(0)
+    vidRec.vid_ID = vidRowData['vid_ID']
+    vidRec.vid_title = vidRowData['vid_title']
+    vidRec.vid_url = vidRowData['vid_url']
+    vidRec.channel_url = vidRowData['channel_url']
+    vidRec.upload_date = vidRowData['upload_date']
+    vidRec.season = vidRowData['season']
+    vidRec.episode = vidRowData['episode']
+    vidRec.dl_file = vidRowData['dl_Filename']
+    return vidRec
+
+
+def createMetaFile(vidRec, metafName):
     """Creates metafName based on vidRec object
      file format criteria https://bitbucket.org/mjarends/extendedpersonalmedia-agent.bundle/src/0982485ee6d54b5b927434210bd694f29a159ef7/Samples/show.metadata
 
@@ -82,16 +104,15 @@ def createMeta(vidRec, metafName):
         metafName (str): Full Path and filename of meta file to create
     """
     # Determine output metafile name
-    log.debug(f"metafName={metafName}")
-
-    log.debug(f"creating {metafName}")
+    logMsg = "vid_ID: {vidRec.vid_ID}"
+    log.debug(f"vid_ID: {vidRec.vid_ID}, metafName={metafName}")
+    log.debug(f"Writing to {metafName}")
     with open(metafName, 'w') as oFile:
         oFile.write("[metadata]\n")
         oFile.write(f"title={vidRec.vid_title}\n")
         oFile.write(f"release={vidRec.upload_date}\n")
-        # Do not put the summary as this can contain bad data.
-
-    log.info(f"created {metafName}")
+        # Summary data not used, as it MUST throughly cleansed of bad data from youtuber.
+    log.debug(f"vid_ID: {vidRec.vid_ID}, created {metafName}")
 
 
 def cleanStr(dirtyStr):
@@ -104,11 +125,11 @@ def cleanStr(dirtyStr):
         str: the string cleaned
     """
     badChar = ["$", "!", "%", "&", "*", ":", "@", "'", "\\", "/"]
-    log.debug(f"Cleaning {dirtyStr}")
+    log.debug(f"Cleaning string: {dirtyStr}")
     for b in badChar:
         dirtyStr = dirtyStr.replace(b, "_")
 
-    log.debug(f"Cleaned {dirtyStr}")
+    log.debug(f"Cleaned string : {dirtyStr}")
     return dirtyStr
 
 
@@ -117,20 +138,18 @@ def calcFilename(vidRec, YTChannel):
     # YouTubeChannel_SnnnnEnnn_yyyy-mm-dd_title.id.extension
     # Get a clean title
     cleanTitle = cleanStr(vidRec.vid_title)
-    log.debug(f"cleanTitle={cleanTitle}")
     season = vidRec.upload_date[:4]
-    log.debug(f"season={season}")
     episode = str(vidRec.episode).zfill(3)
-    log.debug(f"episode={episode}")
     upload_date = vidRec.upload_date
-    log.debug(f"upload_date={upload_date}")
     vidID = vidRec.vid_ID
-    log.debug(f"vidID={vidID}")
-    log.debug(f"video file={vidRec.dl_file}")
+    log.debug(
+        f"cleanTitle={cleanTitle},season={season},episode={episode},upload_date={upload_date},vidID={vidID},dl_file={vidRec.dl_file}")
+
     return f"{YTChannel} - S{season}E{episode} - {cleanTitle}.{vidID}"
 
 
 def json2memDb(inMemDbconn, diskDb):
+    log.info("--- Metadata json files being loaded. ---")
     # Create list of all json files
     jsonFiles = []
     log.debug(f"getting count of json files")
@@ -139,7 +158,7 @@ def json2memDb(inMemDbconn, diskDb):
     for x in files:
         jsonFiles.append(x)
 
-    log.info(f"Movie metadata files found: {len(jsonFiles)}")
+    log.debug(f"movie metadata files found: {len(jsonFiles)}")
     # Read jsonfile and update in memory database, which will be used to determine filenames.
     curFnum = 1
     for jsonFile in jsonFiles:
@@ -174,6 +193,66 @@ def json2memDb(inMemDbconn, diskDb):
         curFnum += 1
 
 
+def createFiles(inMemDbconn, appDb):
+    log.info(f"--- Creating files in {args.outFolder} ---")
+    # Create the meta files, and vids
+    vidsRecs2Process = memdb.getAllVidRows(inMemDbconn)
+    vCount = 1
+    for vidID in vidsRecs2Process:
+        vidRowData = memdb.getVidRow(inMemDbconn, vidID[0])
+        curVidRec = vidRow2VidRec(vidRowData)
+        log.debug(
+            f"---- start {vCount} of {len(vidsRecs2Process)} vid_ID: {curVidRec.vid_ID}")
+
+        # Set origin and destination directories
+        originDir = Path(curVidRec.dl_file).parent
+        destDir = Path(args.outFolder)
+        log.debug(f"originDir={originDir}, destDir = {destDir}")
+
+        # Create destDir if it doesnt exist
+        log.debug(f"checking if destDir={destDir} exists")
+        if not destDir.exists():
+            log.warning(f"Creating {destDir}")
+            destDir.mkdir(parents=True, exist_ok=True)
+
+        # Set baseFilename
+        baseFilename = calcFilename(curVidRec, Path(args.inFolder).name)
+        log.debug(f"baseFilename = {baseFilename}")
+
+        # Set destination metafilename
+        xFilename = baseFilename + ".metadata"
+        destMetaFileName = destDir / Path(xFilename)
+
+        # Set destination Video file name
+        xFilename = baseFilename + Path(curVidRec.dl_file).suffix
+        destVidFileName = destDir / xFilename
+
+        log.debug(
+            f"vid_ID: {curVidRec.vid_ID}, destMetaFileName={destMetaFileName}, destVidFileName={destVidFileName}")
+        srcVidFileName = Path(curVidRec.dl_file)
+        if srcVidFileName.exists():  # Create the files
+            # Create destination metafile
+            createMetaFile(curVidRec, destMetaFileName)
+            log.info(
+                f"Metadata file {vCount} of {len(vidsRecs2Process)} vid_ID: {curVidRec.vid_ID}, created  {destMetaFileName}")
+
+            # Create destination video file
+            logMsg = f"Video file {vCount} of {len(vidsRecs2Process)} vid_ID: {curVidRec.vid_ID}"
+            if args.copyOnly:
+                log.debug(f"copying {srcVidFileName} to {destVidFileName}")
+                shutil.copy2(src=srcVidFileName, dst=destVidFileName)
+                logMsg = f"{logMsg}, COPIED {srcVidFileName} -> {destVidFileName}"
+            else:
+                shutil.move(src=srcVidFileName, dst=destVidFileName)
+                logMsg = f"{logMsg}, moved {srcVidFileName} -> {destVidFileName}"
+            log.info(logMsg)
+        else:  # video file does not exist (do not create files)
+            log.warning(
+                f"{vCount} of {len(vidsRecs2Process)} vid_ID: {curVidRec.vid_ID}, {srcVidFileName} file missing - Skipped")
+
+        vCount += 1
+
+
 def main(args):
     if args.logFile:
         log_fh = RotatingFileHandler(
@@ -194,6 +273,8 @@ def main(args):
     log.info(f"In Directory : {args.inFolder}")
     log.info(f"Out Directory: {args.outFolder}")
     log.info(f"Database File: {args.dbLoc}")
+    if args.copyOnly:
+        log.info(f"   *COPY ONLY enabled")
 
     # Cleaning up for inMem work db. It may have been on disk
     dbLoc = Path(args.dbLoc).parent / "inMem.tmp"
@@ -215,84 +296,43 @@ def main(args):
 
     log.info("Connected to database")
 
-    # json file data -> working memDB
+    # movie metadata file (json) -> working memDB
     json2memDb(inMemDbconn, appDb)
-    # What inMem seasons need to be updated
+    # Determine seasons to be updated
+    log.info("--- Determining episode numbers ---")
     seasons2Update = memdb.getSeasons2Update(inMemDbconn)
     log.debug(f"seasons to update: {len(seasons2Update)}")
     sCount = 1
-    for sRow in seasons2Update:  # Updating each seasn
+    for sRow in seasons2Update:  # Updating each season
         # Get vidID's that need to be updates
-        vids2Update = memdb.getVidRecsSeason(inMemDbconn, sRow['season'])
+        vids2Update = memdb.getVidRecsSeason(inMemDbconn, sRow[0])
         log.debug(
-            f"season {sRow['season']} - videos to update {len(vids2Update)}")
+            f"season {sRow[0]} - videos to update {len(vids2Update)}")
 
         # Get last episode for season
-        lastSeasonEpisode = appDb.getLastEpisode(season=sRow['season'])
+        lastSeasonEpisode = appDb.getLastEpisode(season=sRow[0])
 
         # Update inMem database with episode numbers
         vCount = 1
         for vidRow in vids2Update:
+            vidRowData = memdb.getVidRow(inMemDbconn, vidRow[0])
+            curVidRec = vidRow2VidRec(vidRowData)
             lastSeasonEpisode += 1
-            curVidRec = YTClasses.VidRec(0)
-            vidRowData = memdb.getVidRow(inMemDbconn, vidRow['vid_ID'])
-
-            curVidRec.vid_ID = vidRowData['vid_ID']
-            curVidRec.vid_title = vidRowData['vid_title']
-            curVidRec.vid_url = vidRowData['vid_url']
-            curVidRec.channel_url = vidRowData['channel_url']
-            curVidRec.upload_date = vidRowData['upload_date']
-            curVidRec.season = vidRowData['season']
             curVidRec.episode = lastSeasonEpisode
             curVidRec.dl_file = vidRowData['dl_Filename']
-            # Got to save record
+            # Update inmem db record
             memdb.updateVidRec(inMemDbconn, curVidRec)
-            # {curVidRec.vid_ID}) {curVidRec.vid_title}
             log.info(
                 f"Season {curVidRec.season} ({sCount} of {len(seasons2Update)}) Video ({vCount} of {len(vids2Update)}) vid_ID: {curVidRec.vid_ID} assigned episode {curVidRec.episode}")
             vCount += 1
 
         sCount += 1
-    #         # Get baseFilename
-    #         baseFilename = calcFilename(curVidRec, Path(args.inFolder).name)
-    #         log.debug(f"Base Filename = {baseFilename}")
 
-    #         # Set origin and destination directories
-    #         originDir = Path(curVidRec.dl_file).parent
-    #         log.debug(f"originDir = {originDir}")
-    #         destDir = Path(args.outFolder)
-    #         log.debug(f"destDir = {destDir}")
-
-    #         # Create destDir if it doesnt exist
-    #         log.debug(f"checking if destDir={destDir} exists")
-    #         if not destDir.exists():
-    #             log.warning(f"Creating {destDir}")
-    #             destDir.mkdir(parents=True, exist_ok=True)
-
-    #         # Set destination metafilename
-    #         xFilename = baseFilename + ".metadata"
-    #         destMetaFileName = destDir / Path(xFilename)
-    #         log.debug(f"metadata file={destMetaFileName}")
-
-    #         # Set destination Video file name
-    #         xFilename = baseFilename + Path(curVidRec.dl_file).suffix
-    #         destVidFileName = destDir / xFilename
-    #         log.debug(f"video file name={destVidFileName}")
-
-    #         # If video file is missing then don't create anything
-    #         srcVidFileName = Path(curVidRec.dl_file)
-    #         if srcVidFileName.exists:
-    #             # Create destination metafile
-    #             createMeta(curVidRec, destMetaFileName)
-    #             # Create destination video file
-    #             if args.copyOnly:
-    #                 log.info(f"COPIED to: {destVidFileName}")
-    #                 shutil.copy2(src=srcVidFileName, dst=destVidFileName)
-    #             else:
-    #                 shutil.move(src=srcVidFileName, dst=destVidFileName)
-    #                 log.info(f"Moved to: {destVidFileName}")
-    #         else:  # video file does not exist
-    #             log.warning(f"Video file {srcVidFileName} missing")
+    # Begin - Put files in out directory
+    createFiles(inMemDbconn, appDb)
+    # END process of put files in out directory
+    # TODO: Now update the on disk database
+    quit()
 
 
 if __name__ == '__main__':

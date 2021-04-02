@@ -66,13 +66,10 @@ def getSeasons2Update(dbConn):
         dbConn (db Connection): db connection object to the database
 
     Returns:
-        tuple dictionary list: seasons which need to be updated
-        [{'season':2000},{'season':2001}...]
-    """
+        [list]: A list of vid_id's.    """
     sql = "SELECT season FROM vidinfo WHERE episode is NULL GROUP by season ORDER BY season"
     # Build SQL and execute
     try:
-        dbConn.row_factory = sqlite3.Row  # .keys() enabled for column names
         c = dbConn.cursor()
         c.execute(sql)
         results = c.fetchall()
@@ -122,13 +119,11 @@ def getVidRecsSeason(dbConn, season):
         dbConn (db Connection): db connection object to the database
 
     Returns:
-        tuple dictionary list: vid_IDs
-        [{'vid_id':'234asdf'},{'vid_id':'2aWedasdff'}...]
+        [list]: A list of vid_id's.
     """
     sql = f"SELECT vid_ID FROM vidinfo WHERE episode is NULL AND season={season} ORDER by upload_date"
     # Execute SQL
     try:
-        dbConn.row_factory = sqlite3.Row
         c = dbConn.cursor()
         c.execute(sql)
         results = c.fetchall()
