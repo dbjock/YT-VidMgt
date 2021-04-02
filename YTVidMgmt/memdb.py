@@ -140,12 +140,42 @@ def getVidRow(dbConn, vid_ID):
             f'Unexpected error executing sql: {sql}', exc_info=True)
         sys.exit(1)
 
-    if results is None:
-        log.debug(f"rows returned 0")
+    if row is None:
+        log.error(f"no record found for vid_ID:{vid_ID}")
         return 0
     else:
-        log.debug(f"rows returned {len(results)}")
-        return results
+        log.debug(f"record for vid_ID:{vid_ID}")
+        return row
+
+
+def updateVidRec(dbConn, vidRec):
+    """Update in memory video record
+
+    Args:
+        dbConn ([type]): dbconnection to inmemory database
+        vidRec ([type]): Video record to be updated
+
+    Returns:
+        list: [retCode,retDescription]
+        NOTE: if there is any error is updating record this method will critical fail out.
+    """
+    log.debug(f"updating vidRec: {vidRec}")
+    updateSQL = "UPDATE vidinfo "
+    setSQL = "SET episode = :episode "
+    whereSQL = "WHERE vid_ID = :vid_ID"
+    sql = f"{updateSQL} {setSQL} {whereSQL}"
+    theVals = {
+        'vid_ID': vidRec.vid_ID,
+        'episode': vidRec.episode}
+    result = _exeDML(dbConn, sql, theVals)
+    if result[0] == 0:
+        result[1] = f"vidRec id : {vidRec.vid_ID} updated"
+    else:
+        log.critical(f"problem adding vidRec {result}.")
+        sys.exit(1)
+
+    log.debug(f"returning {result}")
+    return result
 
 
 def _exeScriptFile(dbConn, scriptFileName):
