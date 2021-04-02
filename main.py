@@ -193,7 +193,13 @@ def json2memDb(inMemDbconn, diskDb):
         curFnum += 1
 
 
-def createFiles(inMemDbconn, appDb):
+def createFiles(inMemDbconn, diskDb):
+    """Creates files and updates disk DB
+
+    Args:
+        inMemDbconn ([type]): [description]
+        diskDb ([type]): [description]
+    """
     log.info(f"--- Creating files in {args.outFolder} ---")
     # Create the meta files, and vids
     vidsRecs2Process = memdb.getAllVidRows(inMemDbconn)
@@ -245,7 +251,9 @@ def createFiles(inMemDbconn, appDb):
             else:
                 shutil.move(src=srcVidFileName, dst=destVidFileName)
                 logMsg = f"{logMsg}, moved {srcVidFileName} -> {destVidFileName}"
-            log.info(logMsg)
+            # Update ondisk DB
+            result = diskDb.addVidRec(curVidRec)
+            log.debug(f"Result from updating appDB: {result}")
         else:  # video file does not exist (do not create files)
             log.warning(
                 f"{vCount} of {len(vidsRecs2Process)} vid_ID: {curVidRec.vid_ID}, {srcVidFileName} file missing - Skipped")
@@ -331,7 +339,7 @@ def main(args):
     # Begin - Put files in out directory
     createFiles(inMemDbconn, appDb)
     # END process of put files in out directory
-    # TODO: Now update the on disk database
+
     quit()
 
 
