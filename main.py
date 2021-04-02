@@ -9,9 +9,7 @@ import argparse
 import copy
 import json
 
-# TODO - Create function to create/move/copy files to outfolder from inmem db
-# TODO - Convert memdb.getVidRecsSeason to return a list
-# App Custome modules
+# App Custom modules
 from YTVidMgmt import YTClasses
 from YTVidMgmt import memdb
 
@@ -251,6 +249,8 @@ def createFiles(inMemDbconn, diskDb):
             else:
                 shutil.move(src=srcVidFileName, dst=destVidFileName)
                 logMsg = f"{logMsg}, moved {srcVidFileName} -> {destVidFileName}"
+            log.info(logMsg)
+
             # Update ondisk DB
             result = diskDb.addVidRec(curVidRec)
             log.debug(f"Result from updating appDB: {result}")
