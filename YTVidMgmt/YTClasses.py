@@ -226,10 +226,12 @@ class APPdb:
             resultCode = 0 success
             resultCode > 0 unsuccessfull. See resultText
         """
-        log.debug(f"add VidRec")
-        sql = "INSERT INTO vidinfo (vid_ID, vid_url,channel_url,upload_date,description,vid_title,episode) VALUES (:vid_ID,:vid_url,:channel_url,:upload_date,:description,:vid_title,:episode)"
+        log.debug(f"setting up sql")
+        insertSQL = "INSERT INTO vidinfo (vid_ID,vid_title,vid_url,channel_url,upload_date,season,episode)"
+        valueSQL = "VALUES (:vid_ID,:vid_title,:vid_url,:channel_url,:upload_date,:season,:episode)"
         theVals = {'vid_ID': vidRec.vid_ID, 'vid_url': vidRec.vid_url, 'channel_url': vidRec.channel_url,
-                   'upload_date': vidRec.upload_date, 'description': vidRec.description, 'vid_title': vidRec.vid_title, 'episode': vidRec.episode}
+                   'upload_date': vidRec.upload_date, 'vid_title': vidRec.vid_title, 'season': vidRec.season, 'episode': vidRec.episode}
+        sql = f"{insertSQL} {valueSQL}"
         r = self._exeDML(sql, theVals)
         if r[0] == 0:
             r[1] = f"vidRec id : {vidRec.vid_ID} added"
