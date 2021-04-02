@@ -143,10 +143,10 @@ class APPdb:
             sys.exit(1)
 
         if results is None:
-            log.debug("No records. Last episode = 0")
+            log.debug("No records. returning 0")
             return 0
         else:
-            log.debug(f"results = {results}")
+            log.debug(f"returning {results[0]}")
             return results[0]
 
     def getSeasons2Update(self):
