@@ -13,7 +13,7 @@ import json
 from YTVidMgmt import YTClasses
 from YTVidMgmt import memdb
 
-APP_VER = "1.1
+APP_VER = "1.1"
 
 # Log Formatters
 smlFMT = logging.Formatter(
