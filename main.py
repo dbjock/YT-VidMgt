@@ -13,7 +13,7 @@ import json
 from YTVidMgmt import YTClasses
 from YTVidMgmt import memdb
 
-APP_VER = "1.1.BETAMAX"
+APP_VER = "1.1
 
 # Log Formatters
 smlFMT = logging.Formatter(
@@ -157,6 +157,9 @@ def json2memDb(inMemDbconn, diskDb):
         jsonFiles.append(x)
 
     log.debug(f"movie metadata files found: {len(jsonFiles)}")
+    if len(jsonFiles) == 0:
+        log.info("No metadata files found")
+
     # Read jsonfile and update in memory database, which will be used to determine filenames.
     curFnum = 1
     for jsonFile in jsonFiles:
@@ -310,37 +313,38 @@ def main(args):
     log.info("--- Determining episode numbers ---")
     seasons2Update = memdb.getSeasons2Update(inMemDbconn)
     log.debug(f"seasons to update: {len(seasons2Update)}")
-    sCount = 1
-    for sRow in seasons2Update:  # Updating each season
-        # Get vidID's that need to be updates
-        vids2Update = memdb.getVidRecsSeason(inMemDbconn, sRow[0])
-        log.debug(
-            f"season {sRow[0]} - videos to update {len(vids2Update)}")
+    if len(seasons2Update) == 0:
+        log.info("No seasons to update")
+    else:
+        sCount = 1
+        for sRow in seasons2Update:  # Updating each season
+            # Get vidID's that need to be updates
+            vids2Update = memdb.getVidRecsSeason(inMemDbconn, sRow[0])
+            log.debug(
+                f"season {sRow[0]} - videos to update {len(vids2Update)}")
 
-        # Get last episode for season
-        lastSeasonEpisode = appDb.getLastEpisode(season=sRow[0])
+            # Get last episode for season
+            lastSeasonEpisode = appDb.getLastEpisode(season=sRow[0])
 
-        # Update inMem database with episode numbers
-        vCount = 1
-        for vidRow in vids2Update:
-            vidRowData = memdb.getVidRow(inMemDbconn, vidRow[0])
-            curVidRec = vidRow2VidRec(vidRowData)
-            lastSeasonEpisode += 1
-            curVidRec.episode = lastSeasonEpisode
-            curVidRec.dl_file = vidRowData['dl_Filename']
-            # Update inmem db record
-            memdb.updateVidRec(inMemDbconn, curVidRec)
-            log.info(
-                f"Season {curVidRec.season} ({sCount} of {len(seasons2Update)}) Video ({vCount} of {len(vids2Update)}) vid_ID: {curVidRec.vid_ID} assigned episode {curVidRec.episode}")
-            vCount += 1
+            # Update inMem database with episode numbers
+            vCount = 1
+            for vidRow in vids2Update:
+                vidRowData = memdb.getVidRow(inMemDbconn, vidRow[0])
+                curVidRec = vidRow2VidRec(vidRowData)
+                lastSeasonEpisode += 1
+                curVidRec.episode = lastSeasonEpisode
+                curVidRec.dl_file = vidRowData['dl_Filename']
+                # Update inmem db record
+                memdb.updateVidRec(inMemDbconn, curVidRec)
+                log.info(
+                    f"Season {curVidRec.season} ({sCount} of {len(seasons2Update)}) Video ({vCount} of {len(vids2Update)}) vid_ID: {curVidRec.vid_ID} assigned episode {curVidRec.episode}")
+                vCount += 1
 
-        sCount += 1
+            sCount += 1
 
-    # Begin - Put files in out directory
-    createFiles(inMemDbconn, appDb)
-    # END process of put files in out directory
-
-    quit()
+        # Begin - Put files in out directory
+        createFiles(inMemDbconn, appDb)
+        # END process of put files in out directory
 
 
 if __name__ == '__main__':
