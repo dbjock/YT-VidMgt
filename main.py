@@ -69,6 +69,12 @@ def json2VidRec(jsonFile, delFile=False):
         vidRec.vid_title = jData['title']
         vidRec.dl_file = jData['_filename']
 
+    if delFile:
+        log.debug(f"deleting {jsonFile}")
+        jsonFile.unlink()
+    else:
+        log.debug(f"NOT deleting {jsonFile}")
+
     return vidRec
 
 
@@ -170,7 +176,10 @@ def json2memDb(inMemDbconn, diskDb):
     curFnum = 1
     for jsonFile in jsonFiles:
         log.info(f"Loading file {curFnum} of {len(jsonFiles)}: {jsonFile}")
-        curVidRec = json2VidRec(jsonFile)
+        if args.copyOnly:
+            curVidRec = json2VidRec(jsonFile, delFile=False)
+        else:
+            curVidRec = json2VidRec(jsonFile, delFile=True)
 
         # Check db to see if video record object id exists
         log.debug(
@@ -201,14 +210,14 @@ def json2memDb(inMemDbconn, diskDb):
 
 
 def createFiles(inMemDbconn, diskDb):
-    """Creates files and updates disk DB
+    """Creates vids and meta files queued from inMemDB
 
     Args:
         inMemDbconn ([type]): [description]
         diskDb ([type]): [description]
     """
     log.info(f"--- Creating files in {args.outFolder} ---")
-    # Create the meta files, and vids
+    # Create the meta files, and vids using the inMemDB
     vidsRecs2Process = memdb.getAllVidRows(inMemDbconn)
     vCount = 1
     for vidID in vidsRecs2Process:
