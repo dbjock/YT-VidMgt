@@ -13,7 +13,7 @@ import json
 from YTVidMgmt import YTClasses
 from YTVidMgmt import memdb
 
-APP_VER = "1.1"
+APP_VER = "1.2"
 
 # Log Formatters
 smlFMT = logging.Formatter(
@@ -124,11 +124,17 @@ def cleanStr(dirtyStr):
     """
     badChar = ["$", "!", "%", "&", "*", ":", "@", "'", "\\", "/"]
     log.debug(f"Cleaning string: {dirtyStr}")
-    for b in badChar:
-        dirtyStr = dirtyStr.replace(b, "_")
+    # encode so on ASCII characters
+    encoded_string = dirtyStr.encode("ascii", "ignore")
+    decode_string = encoded_string.decode()
+    log.debug(f"stripped to ASCII decode_string: {decode_string}")
 
-    log.debug(f"Cleaned string : {dirtyStr}")
-    return dirtyStr
+    # Replace badChar in ascII only string
+    for b in badChar:
+        decode_string = decode_string.replace(b, "_")
+
+    log.debug(f"Cleaned string : {decode_string}")
+    return decode_string
 
 
 def calcFilename(vidRec, YTChannel):
