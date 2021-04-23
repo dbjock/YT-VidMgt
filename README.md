@@ -31,6 +31,8 @@ This takes files download from youtube-dl --write-info-json option and will upda
 
 ## Change Log
 
+Version 1.21
+- Console logging output switch to sys.stdout
 Version 1.2
 - Non ascii characters are stripped from video title.
 - FIX - youtube-dl json files are deleted. (-c they will not be)

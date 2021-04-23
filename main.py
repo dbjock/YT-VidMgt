@@ -13,7 +13,7 @@ import json
 from YTVidMgmt import YTClasses
 from YTVidMgmt import memdb
 
-APP_VER = "1.2"
+APP_VER = "1.21"
 
 # Log Formatters
 smlFMT = logging.Formatter(
@@ -21,7 +21,7 @@ smlFMT = logging.Formatter(
 extFMT = logging.Formatter(
     '%(asctime)s %(levelname)-8s:%(name)s.%(funcName)s: %(message)s')
 # Log Handlers
-console = logging.StreamHandler()
+console = logging.StreamHandler(sys.stdout)
 console.setLevel(logging.INFO)
 console.setFormatter(smlFMT)
 # Initilizing logging (This is the root logger now)
