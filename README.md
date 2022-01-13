@@ -31,6 +31,8 @@ This takes files download from youtube-dl --write-info-json option and will upda
 
 ## Change Log
 
+Version 1.22
+- Stoping json files from being deleted when the vid file is missing
 Version 1.21
 - Console logging output switch to sys.stdout
 Version 1.2

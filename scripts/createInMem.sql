@@ -13,7 +13,8 @@ CREATE TABLE vidinfo (
     upload_date DATETIME,
     season      INTEGER,
     episode     INTEGER,
-    dl_FileName
+    dl_FileName,
+    json_FileName
 );
 
 COMMIT TRANSACTION;

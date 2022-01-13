@@ -36,8 +36,8 @@ def initDB(scriptPath, dbLoc=":memory:"):
 
 
 def addVidRec(dbConn, vidRec):
-    log.debug(f"adding vidRec: {vidRec}")
-    sql = "INSERT INTO vidinfo (vid_ID, vid_url,channel_url,upload_date,vid_title,season,episode,dl_FileName) VALUES (:vid_ID,:vid_url,:channel_url,:upload_date,:vid_title,:season,:episode,:dl_filename)"
+    log.debug(f"adding vidRec.vid_ID: {vidRec.vid_ID}")
+    sql = "INSERT INTO vidinfo (vid_ID, vid_url,channel_url,upload_date,vid_title,season,episode,dl_FileName,json_FileName) VALUES (:vid_ID,:vid_url,:channel_url,:upload_date,:vid_title,:season,:episode,:dl_filename,:json_filename)"
     theVals = {
         'vid_ID': vidRec.vid_ID,
         'vid_url': vidRec.vid_url,
@@ -47,7 +47,8 @@ def addVidRec(dbConn, vidRec):
         'vid_title': vidRec.vid_title,
         'season': vidRec.season,
         'episode': vidRec.episode,
-        'dl_filename': vidRec.dl_file
+        'dl_filename': vidRec.dl_file,
+        'json_filename': vidRec.json_file
     }
     result = _exeDML(dbConn, sql, theVals)
     if result[0] == 0:
@@ -140,7 +141,7 @@ def getVidRecsSeason(dbConn, season):
 
 
 def getVidRow(dbConn, vid_ID):
-    selectSQL = "SELECT vid_ID,vid_title,vid_url,channel_url,upload_date,season,episode,dl_Filename FROM vidinfo"
+    selectSQL = "SELECT vid_ID,vid_title,vid_url,channel_url,upload_date,season,episode,dl_Filename,json_FileName FROM vidinfo"
     whereSQL = "WHERE vid_ID=?"
     value = vid_ID
     # Build SQL and execute

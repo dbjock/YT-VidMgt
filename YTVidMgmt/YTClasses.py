@@ -219,7 +219,7 @@ class APPdb:
     def addVidRec(self, vidRec):
         """Create/Save Video Record to db
         Args:
-            vidRec ([type]): [description]
+            vidRec : VidRec object
 
         Returns:
             list: (resultCode, resultText)
@@ -253,6 +253,7 @@ class VidRec:
         self.season = None
         self.episode = None
         self.dl_file = None  # download file name
+        self.json_file = None
 
     def __str__(self):
-        return f'vid_id={self.vid_ID}, vid_title={self.vid_title}, vid_url={self.vid_url}, channel_url={self.channel_url}, upload_date={self.upload_date}, season={self.season}, episode={self.episode},'
+        return f'vid_id={self.vid_ID}, vid_title={self.vid_title}, vid_url={self.vid_url}, channel_url={self.channel_url}, upload_date={self.upload_date}, season={self.season}, episode={self.episode}'

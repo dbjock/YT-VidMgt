@@ -39,12 +39,11 @@ def logTest():
     log.warning("logtesting-I am a warning entry")
 
 
-def json2VidRec(jsonFile, delFile=False):
+def json2VidRec(jsonFile):
     """Creates vidRec object from jsonFile
 
     Args:
         jsonFile (Path obj): json file to load
-        delFile (bool, optional): Delete jsonFile when converted. Defaults to False.
 
     Returns:
         VidRec obj: video record class object
@@ -68,12 +67,7 @@ def json2VidRec(jsonFile, delFile=False):
         vidRec.season = uploadDate.strftime('%Y')
         vidRec.vid_title = jData['title']
         vidRec.dl_file = jData['_filename']
-
-    if delFile:
-        log.debug(f"deleting {jsonFile}")
-        jsonFile.unlink()
-    else:
-        log.debug(f"NOT deleting {jsonFile}")
+        vidRec.json_file = str(jsonFile)
 
     return vidRec
 
@@ -96,6 +90,8 @@ def vidRow2VidRec(vidRowData):
     vidRec.season = vidRowData['season']
     vidRec.episode = vidRowData['episode']
     vidRec.dl_file = vidRowData['dl_Filename']
+    vidRec.json_file = vidRowData['json_FileName']
+
     return vidRec
 
 
@@ -115,8 +111,8 @@ def createMetaFile(vidRec, metafName):
         oFile.write("[metadata]\n")
         oFile.write(f"title={vidRec.vid_title}\n")
         oFile.write(f"release={vidRec.upload_date}\n")
-        # Summary data not used, as it MUST throughly cleansed of bad data from youtuber.
-    log.debug(f"vid_ID: {vidRec.vid_ID}, created {metafName}")
+        # Summary data not used. Youtubers can put bad stuff in here. Need to code 'cleansing' of this data.
+    log.info(f"vid_ID: {vidRec.vid_ID}, created {metafName}")
 
 
 def cleanStr(dirtyStr):
@@ -176,14 +172,10 @@ def json2memDb(inMemDbconn, diskDb):
     curFnum = 1
     for jsonFile in jsonFiles:
         log.info(f"Loading file {curFnum} of {len(jsonFiles)}: {jsonFile}")
-        if args.copyOnly:
-            curVidRec = json2VidRec(jsonFile, delFile=False)
-        else:
-            curVidRec = json2VidRec(jsonFile, delFile=True)
-
+        curVidRec = json2VidRec(jsonFile)
         # Check db to see if video record object id exists
         log.debug(
-            f"check disk db for ({curVidRec.vid_ID}) {curVidRec.vid_title}")
+            f"Checking disk db for ({curVidRec.vid_ID}) {curVidRec.vid_title}")
         dbVidRec = diskDb.getVid(curVidRec.vid_ID)
         if dbVidRec.vid_ID == curVidRec.vid_ID:  # exists in db
             log.warning(
@@ -203,7 +195,7 @@ def json2memDb(inMemDbconn, diskDb):
         result = memdb.addVidRec(inMemDbconn, curVidRec)
         if result[0] != 0:  # Failure adding
             log.critical(
-                f"Unable to save video record. vid_id: {curVidRec.vid_ID}, vidFile: {vidRec.dl_file}")
+                f"Unable to save video record. vid_id: {curVidRec.vid_ID}, vidFile: {curVidRec.dl_file}")
             log.critical(f"Return Code: {result}")
             sys.exit(1)
         curFnum += 1
@@ -222,6 +214,9 @@ def createFiles(inMemDbconn, diskDb):
     vCount = 1
     for vidID in vidsRecs2Process:
         vidRowData = memdb.getVidRow(inMemDbconn, vidID[0])
+        log.debug(f"vidRowData:")
+        for k in vidRowData.keys():
+            log.debug(f"{k}={vidRowData[k]}")
         curVidRec = vidRow2VidRec(vidRowData)
         log.debug(
             f"---- start {vCount} of {len(vidsRecs2Process)} vid_ID: {curVidRec.vid_ID}")
@@ -249,25 +244,39 @@ def createFiles(inMemDbconn, diskDb):
         xFilename = baseFilename + Path(curVidRec.dl_file).suffix
         destVidFileName = destDir / xFilename
 
-        log.debug(
-            f"vid_ID: {curVidRec.vid_ID}, destMetaFileName={destMetaFileName}, destVidFileName={destVidFileName}")
         srcVidFileName = Path(curVidRec.dl_file)
-        if srcVidFileName.exists():  # Create the files
+        if curVidRec.json_file:
+            srcJsonFileName = Path(curVidRec.json_file)
+        else:
+            srcJsonFileName = None
+
+        if srcVidFileName.exists():  # Create files since vid file exists
             # Create destination metafile
             createMetaFile(curVidRec, destMetaFileName)
             log.info(
                 f"Metadata file {vCount} of {len(vidsRecs2Process)} vid_ID: {curVidRec.vid_ID}, created  {destMetaFileName}")
-
             # Create destination video file
-            logMsg = f"Video file {vCount} of {len(vidsRecs2Process)} vid_ID: {curVidRec.vid_ID}"
+            logmsg_prefix = f"Video file {vCount} of {len(vidsRecs2Process)} vid_ID: {curVidRec.vid_ID}"
             if args.copyOnly:
                 log.debug(f"copying {srcVidFileName} to {destVidFileName}")
-                shutil.copy2(src=srcVidFileName, dst=destVidFileName)
-                logMsg = f"{logMsg}, COPIED {srcVidFileName} -> {destVidFileName}"
+                try:
+                    shutil.copy2(src=srcVidFileName, dst=destVidFileName)
+                except:
+                    log.critical(f"{logmsg_prefix} Unexpected error when trying to copy {srcVidFileName} -> {destVidFileName}",exc_info=True)
+                    sys.exit(1)
+                logMsg = f"{logmsg_prefix} COPIED {srcVidFileName} -> {destVidFileName}"
             else:
-                shutil.move(src=srcVidFileName, dst=destVidFileName)
-                logMsg = f"{logMsg}, moved {srcVidFileName} -> {destVidFileName}"
-            log.info(logMsg)
+                try:
+                    shutil.move(src=srcVidFileName, dst=destVidFileName)
+                except:
+                    log.critical(f"{logmsg_prefix} Unexpected error when trying to move {srcVidFileName} -> {destVidFileName}",exc_info=True)
+                    sys.exit(1)
+                logMsg = f"{logmsg_prefix} moved {srcVidFileName} -> {destVidFileName}"
+                # delete json file as no longer needed
+                if srcJsonFileName:
+                    log.debug(f"deleted {srcJsonFileName}")
+                    srcJsonFileName.unlink
+            log.info(f"{logMsg}")
 
             # Update ondisk DB
             result = diskDb.addVidRec(curVidRec)
@@ -374,7 +383,7 @@ if __name__ == '__main__':
     parser.add_argument("-l", "--logFile", help="File to Log to",
                         metavar="LogFile", type=str, dest="logFile")
     parser.add_argument(
-        "-c", "--copy", help="Testing. Video files will be copied not moved.", action='store_true', dest="copyOnly")
+        "-c", "--copy", help="Copy Video files and do not delete json files", action='store_true', dest="copyOnly")
     parser.add_argument("--noInMemDb", help="Disable inMemory working table",
                         action='store_true', dest="noInMemDb")
     args = parser.parse_args()
